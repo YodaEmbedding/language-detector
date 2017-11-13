@@ -75,14 +75,12 @@ def write_alphabet(alphabet, directory, font_path):
 
 if __name__ == "__main__":
     font_paths = glob.glob('../fonts/*.ttf')
-    alphabet = list(string.ascii_lowercase)
+    alphabet = list(string.ascii_letters)
     for font_path in font_paths:
         print(font_path)
         write_alphabet(alphabet, '../data/alphabet/', font_path)
 
 # TODO:
-# Precalculate font size and save centered version.
-# Raise exception if outside boundaries.
 # Calculate maximum boundary size needed for data set?
 # (Leave minimal space around characters...?)
 # Normalize character sizes in some way.
