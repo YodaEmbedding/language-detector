@@ -2,8 +2,10 @@
 
 import contextlib
 import glob
-import string
 import os
+import random
+import shutil
+import string
 
 from matplotlib import font_manager
 
@@ -96,18 +98,54 @@ def write_alphabet(alphabet, directory, font_path):
         path = os.path.join(directory, filename)
         write_letter(letter, font, path)
 
+def make_fresh_directories(root, directories):
+    os.makedirs(root, exist_ok=True)
+
+    for dir_name, _ in directories:
+        directory = os.path.join(root, dir_name)
+        if os.path.isdir(directory):
+            shutil.rmtree(directory)
+        os.mkdir(directory)
+
+def shuffle_files_into_directories(root, directories):
+    """Shuffle image files into subdirectories."""
+
+    files = next(os.walk(root))[2]
+    random.shuffle(files)
+    start_idx = 0
+
+    for dir_name, ratio in directories:
+        directory = os.path.join(root, dir_name)
+        end_idx = start_idx + int(ratio * len(files))
+        for f in files[start_idx : end_idx]:
+            shutil.move(os.path.join(root, f), directory)
+        start_idx = end_idx
+
 if __name__ == "__main__":
-    if not os.path.isdir('../fonts'):
+    directories = [
+        ('train', 0.5),
+        ('test', 0.25),
+        ('validation', 0.25),
+    ]
+
+    FONT_ROOT = '../fonts'
+    DATA_ROOT = '../data/alphabet'
+
+    make_fresh_directories(DATA_ROOT, directories)
+
+    if not os.path.isdir(FONT_ROOT):
         raise Exception('Please create a fonts directory. '
             'You may download sample ttf fonts from '
             'https://www.dropbox.com/s/tzz2njlsg4c3u3c/fonts.zip')
 
     alphabet = list(string.ascii_lowercase)
-    font_paths = glob.glob('../fonts/*.ttf')
+    font_paths = glob.glob(os.path.join(FONT_ROOT, '*.ttf'))
 
     for font_path in font_paths:
         print(font_path)
-        write_alphabet(alphabet, '../data/alphabet/', font_path)
+        write_alphabet(alphabet, DATA_ROOT, font_path)
+
+    shuffle_files_into_directories(DATA_ROOT, directories)
 
 # TODO:
 # Split a given directory into training/testing/validation folders
