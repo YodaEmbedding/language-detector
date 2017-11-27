@@ -99,12 +99,13 @@ def write_alphabet(alphabet, directory, font_path):
         write_letter(letter, font, path)
 
 def make_fresh_directories(root, directories):
+    if os.path.isdir(root):
+        shutil.rmtree(root)
+
     os.makedirs(root, exist_ok=True)
 
     for dir_name, _ in directories:
         directory = os.path.join(root, dir_name)
-        if os.path.isdir(directory):
-            shutil.rmtree(directory)
         os.mkdir(directory)
 
 def shuffle_files_into_directories(root, directories):
