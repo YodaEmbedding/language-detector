@@ -4,6 +4,11 @@ import os
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 
+# Global constants
+BATCH_SIZE = 64
+LEARNING_RATE = 1e-3
+DECAY_RATE = 0.95
+
 # Initialization functions
 # Initialize with noise
 def weight_variable(shape):
@@ -38,7 +43,11 @@ def fc_layer(x, channels_in, channels_out, name='fc', apply_act=True):
         return tf.nn.relu(h) if apply_act else h
 
 class Model(object):
-    def __init__(self):
+    def __init__(self, base_learning_rate, train_size):
+        self.base_learning_rate = base_learning_rate
+        self.batch_step = tf.Variable(0, dtype=tf.float32)
+        self.train_size = train_size
+
         self.x = tf.placeholder(tf.float32, [None, 784], name='x')
         self.y = tf.placeholder(tf.float32, [None, 10], name='labels')
         self.keep_prob = tf.placeholder(tf.float32, name='dropout')
@@ -87,8 +96,16 @@ class Model(object):
         return loss
 
     def optimize(self, loss):
-        optimizer = tf.train.AdamOptimizer(1e-4)
+        optimizer = tf.train.AdamOptimizer(self.learning_rate)
         return optimizer.minimize(loss, name='optimizer')
+
+    @property
+    def learning_rate(self):
+        return tf.train.exponential_decay(self.base_learning_rate,
+            self.batch_step * BATCH_SIZE,
+            self.train_size,
+            DECAY_RATE,
+            staircase=True)
 
     def accuracy(self, labels, logits):
         correct = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
@@ -117,7 +134,7 @@ def get_log_dir(dir_path):
 
 if __name__ == "__main__":
     mnist = input_data.read_data_sets('MNIST_data/', one_hot=True)
-    model = Model()
+    model = Model(LEARNING_RATE, len(mnist.train.images))
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
     with tf.Session() as sess:
@@ -125,7 +142,7 @@ if __name__ == "__main__":
         writer.add_graph(sess.graph)
 
         for i in range(2000):
-            batch_xs, batch_ys = mnist.train.next_batch(50)
+            batch_xs, batch_ys = mnist.train.next_batch(BATCH_SIZE)
             model.train(batch_xs, batch_ys)
 
             if i % 100 == 0:
@@ -137,7 +154,6 @@ if __name__ == "__main__":
         print(model.accuracy_eval(mnist.test.images, mnist.test.labels))
 
 # TODO
-# decay learning rate
 # name_scope
 # restore/loading train
 # decorator...
