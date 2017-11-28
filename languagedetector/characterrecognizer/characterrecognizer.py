@@ -185,10 +185,15 @@ def get_dataset_size(root, dataset_name):
     df = pd.read_csv(os.path.join(root, dataset_name, 'dataset.csv'), sep='\t')
     return df.shape[0]
 
+def init_dataset_test(dataset, batch_size):
+    return (dataset.repeat()
+        .map(get_image_data)
+        .batch(batch_size))
+
 def init_dataset_train(dataset, shuffle_buffer_size):
     return (dataset.repeat()
         .shuffle(shuffle_buffer_size)
-        .map(get_image_data)  # TODO
+        .map(get_image_data)
         .batch(BATCH_SIZE))
 
 if __name__ == "__main__":
@@ -199,17 +204,26 @@ if __name__ == "__main__":
 
     directories = [ 'train', 'test', 'validation' ]
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
-    train_size = get_dataset_size(DATA_ROOT, 'train')
-    datasets['train'] = init_dataset_train(datasets['train'], BATCH_SIZE * 4)  # train_size)
-    it_train = datasets['train'].make_one_shot_iterator()
+    dataset_sizes = { d: get_dataset_size(DATA_ROOT, d) for d in directories }
 
-    model = Model(LEARNING_RATE, train_size)
+    datasets['train'] = init_dataset_train(datasets['train'], dataset_sizes['train'])
+    datasets['test'] = init_dataset_test(datasets['test'], dataset_sizes['test'])
+    datasets['validation'] = init_dataset_test(datasets['validation'], dataset_sizes['validation'])
+
+    it_train = datasets['train'].make_one_shot_iterator()
+    it_test = datasets['test'].make_one_shot_iterator()
+    it_validation = datasets['validation'].make_one_shot_iterator()
+
+    model = Model(LEARNING_RATE, dataset_sizes['train'])
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         # sess.run(tf.tables_initializer())
         writer.add_graph(sess.graph)
+
+        validation_batch = sess.run(it_validation.get_next())
+        test_batch = sess.run(it_test.get_next())
 
         # TODO stop training when no improvement on validation set
         for i in range(2000):
@@ -218,15 +232,13 @@ if __name__ == "__main__":
 
             model.train(batch_xs, batch_ys)
 
-            if i % math.ceil(train_size / BATCH_SIZE) == 0:
-                accuracy = model.accuracy_eval(
-                    datasets['validation'].images,
-                    datasets['validation'].labels)
-                summary = model.summarize(batch_xs, batch_ys)
+            if i % math.ceil(dataset_sizes['train'] / BATCH_SIZE) == 0:
+                accuracy = model.accuracy_eval(*validation_batch)
+                summary = model.summarize(*validation_batch)
                 writer.add_summary(summary, i)
                 model.save('./model/model')
 
-        print(model.accuracy_eval(datasets['test'].images, datasets['test'].labels))
+        print(model.accuracy_eval(*test_batch))
 
 # TODO
 
