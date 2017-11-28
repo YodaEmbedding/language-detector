@@ -96,7 +96,7 @@ class Model(object):
 
         fc1 = fc_layer(conv2_flat, 7 * 7 * 64, 1024, 'fc1')
         fc1_drop = tf.nn.dropout(fc1, self.keep_prob)
-        fc2 = fc_layer(fc1_drop, 1024, 10, 'fc2', apply_act=False)
+        fc2 = fc_layer(fc1_drop, 1024, NUM_CLASSES, 'fc2', apply_act=False)
 
         y_predict = fc2
         return y_predict
@@ -164,6 +164,7 @@ def load_dataset(dir_path, label_encoding):
 
     labels = [label_encoding[x] for x in labels]
     tf_labels = tf.one_hot(labels, len(label_encoding))
+    print('beep\n\n\n')
     # tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
     # tf_labels = tf.constant(labels, dtype=tf.int32)
 
