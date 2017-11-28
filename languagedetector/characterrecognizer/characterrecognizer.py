@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
+import math
 import os
 import string
+import numpy as np
+import pandas as pd
 import tensorflow as tf
 
 # Global constants
 BATCH_SIZE = 64
 DECAY_RATE = 0.95
+IMG_WIDTH = 128
+IMG_HEIGHT = 128
 LEARNING_RATE = 1e-3
 DATA_ROOT = '../../data/alphabet'
 
@@ -134,29 +139,41 @@ def get_log_dir(dir_path):
         i += 1
     return dir_path + str(i)
 
+def get_image_data(filename, label):
+    print(filename, label)
+    # filename, label = records.dequeue()
+    filename = tf.squeeze(filename)
+    label = tf.squeeze(label)
+    print(filename, label)
+    raw = tf.read_file(filename)
+    # raw = tf.WholeFileReader.read(queue=filename)
+    img = tf.image.decode_png(raw, channels=1)
+    img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
+    # img = tf.image.resize_images(img, [IMG_HEIGHT, IMG_WIDTH])  # TODO
+    return img, label
+
 def load_dataset(dir_path, label_encoding):
-    # TODO consider globbing for *.png
-    # TODO replace with .csv reader
-    files = next(os.walk(dir_path))[2]
-    file_paths = [os.path.join(dir_path, f) for f in files]
-    img_paths = tf.constant(file_paths)
+    df = pd.read_csv(os.path.join(dir_path, 'dataset.csv'), sep='\t')
+    filenames = df['filename']
+    labels = df['label']
 
-    def get_encoded_label(file_path):
-        filename = os.path.splitext(os.path.basename(file_path))[0]
-        label = filename.split('_')[0]
-        return label_encoding[label]
+    file_paths = [os.path.join(dir_path, f) for f in filenames]
+    tf_filenames = tf.constant(file_paths, dtype=tf.string)
 
-    def get_image_data(file_path, label):
-        img = tf.read_file(file_path)
-        img = tf.image.decode_image(img, channels=3)  # TODO channels?
-        # img = tf.image.decode_png(tf.read_file(fname), channels=3)
-        return img
+    # labels = [label_encoding[x] for x in labels]
+    # labels = tf.one_hot(labels, len(label_encoding))
+    tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
 
-    labels = [get_encoded_label(f) for f in file_paths]
-    labels = tf.one_hot(labels, len(label_encoding))
+    # dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
+    # iterator = dataset.make_one_shot_iterator()
+    # next_element = iterator.get_next()
+    # with tf.Session() as sess:
+    #     print(next_element)
+    #     print(sess.run(next_element))
 
-    dataset = tf.data.Dataset.from_tensor_slices((img_paths, labels))
-    return dataset.map(get_image_data, num_parallel_calls=8)
+    dataset = tf.data.Dataset.from_tensor_slices((tf_filenames, tf_labels))
+    # dataset = dataset.shuffle(df.shape[0])(get_image_data)  # TODO, num_parallel_calls=8)  # TODO shuffle?
+    return dataset
 
 def load_datasets(root, directories, label_encoding):
     datasets = {}
@@ -168,28 +185,23 @@ def load_datasets(root, directories, label_encoding):
 
     return datasets
 
-# TODO Remove this
-def my_input_fn(file_path, perform_shuffle=False, repeat_count=1):
-    def decode_csv(line):
-        parsed_line = tf.decode_csv(line, [[0.], [0.], [0.], [0.], [0]])
-        label = parsed_line[-1:] # Last element is the label
-        del parsed_line[-1] # Delete last element
-        features = parsed_line # Everything (but last element) are the features
-        d = dict(zip(feature_names, features)), label
-        return d
+def get_dataset_size(root, dataset_name):
+    df = pd.read_csv(os.path.join(root, dataset_name, 'dataset.csv'), sep='\t')
+    return df.shape[0]
 
-    dataset = (tf.data.TextLineDataset(file_path)
-        .skip(1)           # Skip header
-        .map(decode_csv))
+def init_dataset_train(dataset, shuffle_buffer_size):
+    return (dataset.repeat()
+        .batch(BATCH_SIZE)
+        .shuffle(shuffle_buffer_size)
+        .map(get_image_data))  # TODO
 
-    if perform_shuffle:
-        # Randomizes input using a window of 256 elements (read into memory)
-        dataset = dataset.shuffle(buffer_size=256)
-    dataset = dataset.repeat(repeat_count)  # Repeats dataset this # times
-    dataset = dataset.batch(32)             # Batch size to use
+
+# TODO
+def get_iterator(dataset):
     iterator = dataset.make_one_shot_iterator()
     batch_features, batch_labels = iterator.get_next()
     return batch_features, batch_labels
+
 
 if __name__ == "__main__":
     alphabet = string.ascii_lowercase
@@ -197,11 +209,12 @@ if __name__ == "__main__":
 
     directories = [ 'train', 'test', 'validation' ]
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
+    train_size = get_dataset_size(DATA_ROOT, 'train')
+    datasets['train'] = init_dataset_train(datasets['train'], train_size)
+    # print(datasets['train'].map(lambda x, y: get_image_data(x, y)))
+    it_train = datasets['train'].make_one_shot_iterator()
+    # it_train = datasets['train'].make_initializable_iterator()
 
-    print(datasets['train'].batch(BATCH_SIZE))
-    print(datasets['train'].output_shape)
-    train_size = len(datasets['train'].images)
-    datasets['train'].shuffle(train_size)
     model = Model(LEARNING_RATE, train_size)
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
@@ -211,11 +224,33 @@ if __name__ == "__main__":
 
         # TODO stop training when no improvement on validation set
         for i in range(2000):
-            batch_xs, batch_ys = datasets['train'].next_batch(BATCH_SIZE)
-            # TODO if next_batch fails, reshuffle
+            # batch = it_train.get_next()
+            # batch_filenames, batch_ys = it_train.get_next()
+            batch_xs, batch_ys = it_train.get_next()
+
+            # print(batch)
+            # print(sess.run(batch[0]))
+            # print(batch_filenames.eval())
+            # print(batch_filenames)
+
+            # batch_xs = tf.map_fn(get_image_data, batch_filenames)
+
+            # batch_xs = None
+            # batch = it_train.get_next()
+            # print('')
+            # print(batch)
+            # print(sess.run(batch))
+
+            # print(batch_xs, batch_filenames, batch_ys)
+            print(batch_xs, batch_ys)
+            print(sess.run(batch_ys))
+
+            # print(batch_filenames.map(get_image_data))
+            # batch_xs = get_image_data(batch_filenames)
+
             model.train(batch_xs, batch_ys)
 
-            if i % 100 == 0:
+            if i % math.ceil(train_size / BATCH_SIZE) == 0:
                 accuracy = model.accuracy_eval(
                     datasets['validation'].images,
                     datasets['validation'].labels)
@@ -226,14 +261,25 @@ if __name__ == "__main__":
         print(model.accuracy_eval(datasets['test'].images, datasets['test'].labels))
 
 # TODO
+
 # Load PNG files
+# tf.decode_csv instead of pandas
+# one_hot = tf.one_hot(label, NUM_CLASSES)
+# output_shape for images
 # Shuffle
-# Verify load_dataset code
-# label_encoding should come from reading a info.txt file inside dir_path?
 # name_scope
 # restore/loading train
-# decorator...
-# Keep training data separate from testing data
-# One-hot encoded a, b, c, ...
 # Split source code into multiple files if too long
+
+# Augmentation:
+#     downsample, upscale (simulate different size data)
+#     rotation
+#     noise
+#     contrast
+
+# https://stackoverflow.com/questions/44132307/tf-contrib-data-dataset-repeat-with-shuffle-notice-epoch-end-mixed-epochs
+# If you want to perform some computation between epochs, and avoid mixing data from different epochs, it is probably easiest to avoid repeat() and catch the OutOfRangeError at the end of each epoch.
+
+
+# https://stackoverflow.com/questions/37454932/tensorflow-train-step-feed-incorrect
 
