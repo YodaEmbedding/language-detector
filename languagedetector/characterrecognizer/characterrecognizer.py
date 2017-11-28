@@ -141,15 +141,9 @@ def get_log_dir(dir_path):
 
 def get_image_data(filename, label):
     print(filename, label)
-    # filename, label = records.dequeue()
-    filename = tf.squeeze(filename)
-    label = tf.squeeze(label)
-    print(filename, label)
     raw = tf.read_file(filename)
-    # raw = tf.WholeFileReader.read(queue=filename)
     img = tf.image.decode_png(raw, channels=1)
     img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
-    # img = tf.image.resize_images(img, [IMG_HEIGHT, IMG_WIDTH])  # TODO
     return img, label
 
 def load_dataset(dir_path, label_encoding):
@@ -164,15 +158,7 @@ def load_dataset(dir_path, label_encoding):
     # labels = tf.one_hot(labels, len(label_encoding))
     tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
 
-    # dataset = tf.data.Dataset.from_tensor_slices(tf_filenames)
-    # iterator = dataset.make_one_shot_iterator()
-    # next_element = iterator.get_next()
-    # with tf.Session() as sess:
-    #     print(next_element)
-    #     print(sess.run(next_element))
-
     dataset = tf.data.Dataset.from_tensor_slices((tf_filenames, tf_labels))
-    # dataset = dataset.shuffle(df.shape[0])(get_image_data)  # TODO, num_parallel_calls=8)  # TODO shuffle?
     return dataset
 
 def load_datasets(root, directories, label_encoding):
@@ -191,17 +177,9 @@ def get_dataset_size(root, dataset_name):
 
 def init_dataset_train(dataset, shuffle_buffer_size):
     return (dataset.repeat()
-        .batch(BATCH_SIZE)
         .shuffle(shuffle_buffer_size)
-        .map(get_image_data))  # TODO
-
-
-# TODO
-def get_iterator(dataset):
-    iterator = dataset.make_one_shot_iterator()
-    batch_features, batch_labels = iterator.get_next()
-    return batch_features, batch_labels
-
+        .map(get_image_data)  # TODO
+        .batch(BATCH_SIZE))
 
 if __name__ == "__main__":
     alphabet = string.ascii_lowercase
@@ -211,12 +189,42 @@ if __name__ == "__main__":
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
     train_size = get_dataset_size(DATA_ROOT, 'train')
     datasets['train'] = init_dataset_train(datasets['train'], train_size)
-    # print(datasets['train'].map(lambda x, y: get_image_data(x, y)))
     it_train = datasets['train'].make_one_shot_iterator()
-    # it_train = datasets['train'].make_initializable_iterator()
 
     model = Model(LEARNING_RATE, train_size)
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
+
+
+    # image_list, label_list = read_csv_stuff()
+    # input_queue = tf.train.slice_input_producer([image_list, label_list],
+    #     num_epochs=10,  # TODO
+    #     shuffle=True)
+
+    # image, label = read_images_from_disk(input_queue)
+
+    # # `image_batch` and `label_batch` represent the "next" batch
+    # # read from the input queue.
+    # image_batch, label_batch = tf.train.batch([image, label], batch_size=2)
+
+    # x = image_batch
+    # y_ = label_batch
+
+    # # Define your model in terms of `x` and `y_` here....
+    # train_step = ...
+
+    # # N.B. You must run this function after creating your graph.
+    # init = tf.initialize_all_variables()
+    # sess.run(init)
+
+    # # N.B. You must run this function before `sess.run(train_step)` to
+    # # start the input pipeline.
+    # tf.train.start_queue_runners(sess)
+
+    # for i in range(100):
+    #     # No need to feed, because `x` and `y_` are already bound to
+    #     # the next input batch.
+    #     sess.run(train_step)
+
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -224,29 +232,8 @@ if __name__ == "__main__":
 
         # TODO stop training when no improvement on validation set
         for i in range(2000):
-            # batch = it_train.get_next()
-            # batch_filenames, batch_ys = it_train.get_next()
-            batch_xs, batch_ys = it_train.get_next()
-
-            # print(batch)
-            # print(sess.run(batch[0]))
-            # print(batch_filenames.eval())
-            # print(batch_filenames)
-
-            # batch_xs = tf.map_fn(get_image_data, batch_filenames)
-
-            # batch_xs = None
-            # batch = it_train.get_next()
-            # print('')
-            # print(batch)
-            # print(sess.run(batch))
-
-            # print(batch_xs, batch_filenames, batch_ys)
-            print(batch_xs, batch_ys)
-            print(sess.run(batch_ys))
-
-            # print(batch_filenames.map(get_image_data))
-            # batch_xs = get_image_data(batch_filenames)
+            batch = it_train.get_next()
+            batch_xs, batch_ys = sess.run(batch)
 
             model.train(batch_xs, batch_ys)
 
