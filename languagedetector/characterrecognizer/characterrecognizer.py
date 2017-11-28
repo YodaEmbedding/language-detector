@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 
 import os
+import string
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
 
 # Global constants
 BATCH_SIZE = 64
-LEARNING_RATE = 1e-3
 DECAY_RATE = 0.95
+LEARNING_RATE = 1e-3
+DATA_ROOT = '../../data/alphabet'
 
 # Initialization functions
-# Initialize with noise
 def weight_variable(shape):
+    """Initialize weight variable with noise."""
     initial = tf.truncated_normal(shape, stddev=0.1)
     return tf.Variable(initial)
 
 def bias_variable(shape):
+    """Initialize bias variable with noise."""
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
@@ -132,31 +134,106 @@ def get_log_dir(dir_path):
         i += 1
     return dir_path + str(i)
 
+def load_dataset(dir_path, label_encoding):
+    # TODO consider globbing for *.png
+    # TODO replace with .csv reader
+    files = next(os.walk(dir_path))[2]
+    file_paths = [os.path.join(dir_path, f) for f in files]
+    img_paths = tf.constant(file_paths)
+
+    def get_encoded_label(file_path):
+        filename = os.path.splitext(os.path.basename(file_path))[0]
+        label = filename.split('_')[0]
+        return label_encoding[label]
+
+    def get_image_data(file_path, label):
+        img = tf.read_file(file_path)
+        img = tf.image.decode_image(img, channels=3)  # TODO channels?
+        # img = tf.image.decode_png(tf.read_file(fname), channels=3)
+        return img
+
+    labels = [get_encoded_label(f) for f in file_paths]
+    labels = tf.one_hot(labels, len(label_encoding))
+
+    dataset = tf.data.Dataset.from_tensor_slices((img_paths, labels))
+    return dataset.map(get_image_data, num_parallel_calls=8)
+
+def load_datasets(root, directories, label_encoding):
+    datasets = {}
+
+    for dir_name in directories:
+        dir_path = os.path.join(root, dir_name)
+        print('Loading {}...'.format(dir_path))
+        datasets[dir_name] = load_dataset(dir_path, label_encoding)
+
+    return datasets
+
+# TODO Remove this
+def my_input_fn(file_path, perform_shuffle=False, repeat_count=1):
+    def decode_csv(line):
+        parsed_line = tf.decode_csv(line, [[0.], [0.], [0.], [0.], [0]])
+        label = parsed_line[-1:] # Last element is the label
+        del parsed_line[-1] # Delete last element
+        features = parsed_line # Everything (but last element) are the features
+        d = dict(zip(feature_names, features)), label
+        return d
+
+    dataset = (tf.data.TextLineDataset(file_path)
+        .skip(1)           # Skip header
+        .map(decode_csv))
+
+    if perform_shuffle:
+        # Randomizes input using a window of 256 elements (read into memory)
+        dataset = dataset.shuffle(buffer_size=256)
+    dataset = dataset.repeat(repeat_count)  # Repeats dataset this # times
+    dataset = dataset.batch(32)             # Batch size to use
+    iterator = dataset.make_one_shot_iterator()
+    batch_features, batch_labels = iterator.get_next()
+    return batch_features, batch_labels
+
 if __name__ == "__main__":
-    mnist = input_data.read_data_sets('MNIST_data/', one_hot=True)
-    model = Model(LEARNING_RATE, len(mnist.train.images))
+    alphabet = string.ascii_lowercase
+    label_encoding = dict(zip(alphabet, range(1, len(alphabet) + 1)))
+
+    directories = [ 'train', 'test', 'validation' ]
+    datasets = load_datasets(DATA_ROOT, directories, label_encoding)
+
+    print(datasets['train'].batch(BATCH_SIZE))
+    print(datasets['train'].output_shape)
+    train_size = len(datasets['train'].images)
+    datasets['train'].shuffle(train_size)
+    model = Model(LEARNING_RATE, train_size)
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         writer.add_graph(sess.graph)
 
+        # TODO stop training when no improvement on validation set
         for i in range(2000):
-            batch_xs, batch_ys = mnist.train.next_batch(BATCH_SIZE)
+            batch_xs, batch_ys = datasets['train'].next_batch(BATCH_SIZE)
+            # TODO if next_batch fails, reshuffle
             model.train(batch_xs, batch_ys)
 
             if i % 100 == 0:
-                accuracy = model.accuracy_eval(batch_xs, batch_ys)
+                accuracy = model.accuracy_eval(
+                    datasets['validation'].images,
+                    datasets['validation'].labels)
                 summary = model.summarize(batch_xs, batch_ys)
                 writer.add_summary(summary, i)
                 model.save('./model/model')
 
-        print(model.accuracy_eval(mnist.test.images, mnist.test.labels))
+        print(model.accuracy_eval(datasets['test'].images, datasets['test'].labels))
 
 # TODO
+# Load PNG files
+# Shuffle
+# Verify load_dataset code
+# label_encoding should come from reading a info.txt file inside dir_path?
 # name_scope
 # restore/loading train
 # decorator...
 # Keep training data separate from testing data
 # One-hot encoded a, b, c, ...
+# Split source code into multiple files if too long
 
