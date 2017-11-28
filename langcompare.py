@@ -1,4 +1,4 @@
-#########################################################################################
+#!/usr/bin/env python3
 
 src_path = "C:/_____" # path with word lists
 word = "___" # detected word
@@ -18,7 +18,7 @@ if language == "notset":
         for line in fp:
             if line == word + '\n':
                 language = "set"
-                print('\t' + "French")		
+                print('\t' + "French")
 if language == "notset":
     with open(src_path + "espanol.txt") as fp:
         for line in fp:

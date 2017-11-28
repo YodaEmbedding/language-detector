@@ -1,4 +1,4 @@
-# Need OpenCV, numpy, pytesseract, and PILLOW
+#!/usr/bin/env python3
 
 import cv2
 import numpy as np
@@ -64,7 +64,7 @@ if language == "notset":
         for line in fp:
             if line == word + '\n':
                 language = "set"
-                print('\t' + "French")		
+                print('\t' + "French")
 if language == "notset":
     with open(src_path + "espanol.txt") as fp:
         for line in fp:
