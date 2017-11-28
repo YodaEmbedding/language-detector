@@ -93,16 +93,17 @@ class Model(object):
 
         tf.summary.image('input', x, 3)
 
-        conv1 = conv_layer(x, 1, 32, 'conv1')
-        conv2 = conv_layer(conv1, 32, 64, 'conv2')
-        flat_shape = int(np.prod(conv2.get_shape()[1:]))
-        conv2_flat = tf.reshape(conv2, [-1, flat_shape])
+        layer = conv_layer(x, 1, 32, 'conv1')
+        layer = conv_layer(layer, 32, 64, 'conv2')
+        layer = conv_layer(layer, 64, 128, 'conv3')
+        flat_shape = int(np.prod(layer.get_shape()[1:]))
+        layer = tf.reshape(layer, [-1, flat_shape])
 
-        fc1 = fc_layer(conv2_flat, flat_shape, 1024, 'fc1')
-        fc1_drop = tf.nn.dropout(fc1, self.keep_prob)
-        fc2 = fc_layer(fc1_drop, 1024, NUM_CLASSES, 'fc2', apply_act=False)
+        layer = fc_layer(layer, flat_shape, 2048, 'fc1')
+        layer = tf.nn.dropout(layer, self.keep_prob)
+        layer = fc_layer(layer, 2048, NUM_CLASSES, 'fc2', apply_act=False)
 
-        y_predict = fc2
+        y_predict = layer
         return y_predict
 
     def loss(self, labels, logits):
@@ -222,7 +223,7 @@ if __name__ == "__main__":
         test_batch = sess.run(it_test.get_next())
 
         # TODO stop training when no improvement on validation set
-        for i in range(100000):
+        for i in range(254):
             batch = it_train.get_next()
             batch_xs, batch_ys = sess.run(batch)
 
