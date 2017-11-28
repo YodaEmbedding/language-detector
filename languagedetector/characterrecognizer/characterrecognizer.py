@@ -6,14 +6,21 @@ import string
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import tensorflow.contrib.lookup as tfl
 
 # Global constants
+DATA_ROOT = '../../data/alphabet'
+
 BATCH_SIZE = 64
 DECAY_RATE = 0.95
+LEARNING_RATE = 1e-3
+
 IMG_WIDTH = 128
 IMG_HEIGHT = 128
-LEARNING_RATE = 1e-3
-DATA_ROOT = '../../data/alphabet'
+INPUT_WIDTH = 28
+INPUT_HEIGHT = 28
+
+NUM_CLASSES = 26
 
 # Initialization functions
 def weight_variable(shape):
@@ -55,8 +62,8 @@ class Model(object):
         self.batch_step = tf.Variable(0, dtype=tf.float32)
         self.train_size = train_size
 
-        self.x = tf.placeholder(tf.float32, [None, 784], name='x')
-        self.y = tf.placeholder(tf.float32, [None, 10], name='labels')
+        self.x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, 1], name='x')
+        self.y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='labels')
         self.keep_prob = tf.placeholder(tf.float32, name='dropout')
 
         y_predict = self.inference(self.x)
@@ -81,11 +88,9 @@ class Model(object):
             y_predict (tf.Variable): Prediction.
         """
 
-        # TODO This reshapes to 28 by 28
-        x_image = tf.reshape(x, [-1, 28, 28, 1])
-        tf.summary.image('input', x_image, 3)
+        tf.summary.image('input', x, 3)
 
-        conv1 = conv_layer(x_image, 1, 32, 'conv1')
+        conv1 = conv_layer(x, 1, 32, 'conv1')
         conv2 = conv_layer(conv1, 32, 64, 'conv2')
         conv2_flat = tf.reshape(conv2, [-1, 7 * 7 * 64])
 
@@ -143,7 +148,10 @@ def get_image_data(filename, label):
     print(filename, label)
     raw = tf.read_file(filename)
     img = tf.image.decode_png(raw, channels=1)
-    img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
+    # img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
+    img = tf.image.resize_images(img, tf.constant([INPUT_HEIGHT, INPUT_WIDTH], tf.int32))
+    # one_hot = tf.one_hot(label, NUM_CLASSES)
+    # return img, one_hot
     return img, label
 
 def load_dataset(dir_path, label_encoding):
@@ -154,9 +162,10 @@ def load_dataset(dir_path, label_encoding):
     file_paths = [os.path.join(dir_path, f) for f in filenames]
     tf_filenames = tf.constant(file_paths, dtype=tf.string)
 
-    # labels = [label_encoding[x] for x in labels]
-    # labels = tf.one_hot(labels, len(label_encoding))
-    tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
+    labels = [label_encoding[x] for x in labels]
+    tf_labels = tf.one_hot(labels, len(label_encoding))
+    # tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
+    # tf_labels = tf.constant(labels, dtype=tf.int32)
 
     dataset = tf.data.Dataset.from_tensor_slices((tf_filenames, tf_labels))
     return dataset
@@ -183,51 +192,22 @@ def init_dataset_train(dataset, shuffle_buffer_size):
 
 if __name__ == "__main__":
     alphabet = string.ascii_lowercase
-    label_encoding = dict(zip(alphabet, range(1, len(alphabet) + 1)))
+    codes = list(range(1, len(alphabet) + 1))
+    label_encoding = dict(zip(alphabet, codes))
+    # label_encoding = tfl.HashTable(tfl.KeyValueTensorInitializer(alphabet, codes), -1)
 
     directories = [ 'train', 'test', 'validation' ]
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
     train_size = get_dataset_size(DATA_ROOT, 'train')
-    datasets['train'] = init_dataset_train(datasets['train'], train_size)
+    datasets['train'] = init_dataset_train(datasets['train'], BATCH_SIZE * 4)  # train_size)
     it_train = datasets['train'].make_one_shot_iterator()
 
     model = Model(LEARNING_RATE, train_size)
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
-
-    # image_list, label_list = read_csv_stuff()
-    # input_queue = tf.train.slice_input_producer([image_list, label_list],
-    #     num_epochs=10,  # TODO
-    #     shuffle=True)
-
-    # image, label = read_images_from_disk(input_queue)
-
-    # # `image_batch` and `label_batch` represent the "next" batch
-    # # read from the input queue.
-    # image_batch, label_batch = tf.train.batch([image, label], batch_size=2)
-
-    # x = image_batch
-    # y_ = label_batch
-
-    # # Define your model in terms of `x` and `y_` here....
-    # train_step = ...
-
-    # # N.B. You must run this function after creating your graph.
-    # init = tf.initialize_all_variables()
-    # sess.run(init)
-
-    # # N.B. You must run this function before `sess.run(train_step)` to
-    # # start the input pipeline.
-    # tf.train.start_queue_runners(sess)
-
-    # for i in range(100):
-    #     # No need to feed, because `x` and `y_` are already bound to
-    #     # the next input batch.
-    #     sess.run(train_step)
-
-
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+        # sess.run(tf.tables_initializer())
         writer.add_graph(sess.graph)
 
         # TODO stop training when no improvement on validation set
@@ -249,6 +229,7 @@ if __name__ == "__main__":
 
 # TODO
 
+# Scale network params (28 -> 128, 10 -> 26)
 # Load PNG files
 # tf.decode_csv instead of pandas
 # one_hot = tf.one_hot(label, NUM_CLASSES)
