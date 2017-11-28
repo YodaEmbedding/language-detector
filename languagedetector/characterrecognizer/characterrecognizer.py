@@ -150,8 +150,6 @@ def get_image_data(filename, label):
     img = tf.image.decode_png(raw, channels=1)
     # img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
     img = tf.image.resize_images(img, tf.constant([INPUT_HEIGHT, INPUT_WIDTH], tf.int32))
-    # one_hot = tf.one_hot(label, NUM_CLASSES)
-    # return img, one_hot
     return img, label
 
 def load_dataset(dir_path, label_encoding):
@@ -164,9 +162,6 @@ def load_dataset(dir_path, label_encoding):
 
     labels = [label_encoding[x] for x in labels]
     tf_labels = tf.one_hot(labels, len(label_encoding))
-    print('beep\n\n\n')
-    # tf_labels = tf.constant(labels.tolist(), dtype=tf.string)
-    # tf_labels = tf.constant(labels, dtype=tf.int32)
 
     dataset = tf.data.Dataset.from_tensor_slices((tf_filenames, tf_labels))
     return dataset
@@ -200,7 +195,6 @@ if __name__ == "__main__":
     alphabet = string.ascii_lowercase
     codes = list(range(1, len(alphabet) + 1))
     label_encoding = dict(zip(alphabet, codes))
-    # label_encoding = tfl.HashTable(tfl.KeyValueTensorInitializer(alphabet, codes), -1)
 
     directories = [ 'train', 'test', 'validation' ]
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
@@ -219,14 +213,13 @@ if __name__ == "__main__":
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        # sess.run(tf.tables_initializer())
         writer.add_graph(sess.graph)
 
         validation_batch = sess.run(it_validation.get_next())
         test_batch = sess.run(it_test.get_next())
 
         # TODO stop training when no improvement on validation set
-        for i in range(2000):
+        for i in range(100000):
             batch = it_train.get_next()
             batch_xs, batch_ys = sess.run(batch)
 
@@ -235,6 +228,8 @@ if __name__ == "__main__":
             if i % math.ceil(dataset_sizes['train'] / BATCH_SIZE) == 0:
                 accuracy = model.accuracy_eval(*validation_batch)
                 summary = model.summarize(*validation_batch)
+                epoch = int(i * BATCH_SIZE / dataset_sizes['train'])
+                print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
                 writer.add_summary(summary, i)
                 model.save('./model/model')
 
@@ -242,15 +237,11 @@ if __name__ == "__main__":
 
 # TODO
 
+# Reduce number of fonts
+# Experiment with different hyperparameters
+
+# restore/loading trained model (let this run overnight, with stopping condition)
 # Scale network params (28 -> 128, 10 -> 26)
-# Load PNG files
-# tf.decode_csv instead of pandas
-# one_hot = tf.one_hot(label, NUM_CLASSES)
-# output_shape for images
-# Shuffle
-# name_scope
-# restore/loading train
-# Split source code into multiple files if too long
 
 # Augmentation:
 #     downsample, upscale (simulate different size data)
@@ -258,9 +249,15 @@ if __name__ == "__main__":
 #     noise
 #     contrast
 
+# Write language string distance thing/lookup
+# Write test program (i.e. input one single image)
+# Join everything up together
+
 # https://stackoverflow.com/questions/44132307/tf-contrib-data-dataset-repeat-with-shuffle-notice-epoch-end-mixed-epochs
 # If you want to perform some computation between epochs, and avoid mixing data from different epochs, it is probably easiest to avoid repeat() and catch the OutOfRangeError at the end of each epoch.
 
-
-# https://stackoverflow.com/questions/37454932/tensorflow-train-step-feed-incorrect
+# Nitpicking
+# Split source code into multiple files if too long
+# name_scope
+# tf.decode_csv instead of pandas
 
