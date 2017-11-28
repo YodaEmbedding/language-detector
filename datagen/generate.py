@@ -3,6 +3,7 @@
 import contextlib
 import glob
 import os
+import pandas as pd
 import random
 import shutil
 import string
@@ -14,8 +15,10 @@ from PIL import ImageDraw
 from PIL import ImageFont
 from PIL import ImageOps
 
-IMAGE_SIZE = (128, 128)
+DATA_ROOT = '../data/alphabet'
+FONT_ROOT = '../fonts'
 FONT_SIZE = 64
+IMAGE_SIZE = (128, 128)
 
 def crop_boundaries(img):
     """Crops away white boundaries."""
@@ -108,6 +111,21 @@ def make_fresh_directories(root, directories):
         directory = os.path.join(root, dir_name)
         os.mkdir(directory)
 
+def create_csv(filename, directory):
+    def get_label(file_path):
+        filename = os.path.splitext(os.path.basename(file_path))[0]
+        label = filename.split('_')[0]
+        return label
+
+    files = next(os.walk(directory))[2]
+    random.shuffle(files)
+
+    labels = [get_label(f) for f in files]
+    df = pd.DataFrame({'filename': files, 'label': labels})
+
+    file_path = os.path.join(directory, filename)
+    df.to_csv(file_path, sep='\t', encoding='utf-8', index=False)
+
 def shuffle_files_into_directories(root, directories):
     """Shuffle image files into subdirectories."""
 
@@ -120,6 +138,7 @@ def shuffle_files_into_directories(root, directories):
         end_idx = start_idx + int(ratio * len(files))
         for f in files[start_idx : end_idx]:
             shutil.move(os.path.join(root, f), directory)
+        create_csv('dataset.csv', directory)
         start_idx = end_idx
 
 if __name__ == "__main__":
@@ -128,9 +147,6 @@ if __name__ == "__main__":
         ('test', 0.25),
         ('validation', 0.25),
     ]
-
-    FONT_ROOT = '../fonts'
-    DATA_ROOT = '../data/alphabet'
 
     make_fresh_directories(DATA_ROOT, directories)
 
