@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import math
+import operator
 import os
 import string
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -13,12 +15,13 @@ DATA_ROOT = '../../data/alphabet'
 
 BATCH_SIZE = 64
 DECAY_RATE = 0.95
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
+DROPOUT = 0.5
 
 IMG_WIDTH = 128
 IMG_HEIGHT = 128
-INPUT_WIDTH = 28
-INPUT_HEIGHT = 28
+INPUT_WIDTH = 128
+INPUT_HEIGHT = 128
 
 NUM_CLASSES = 26
 
@@ -76,7 +79,7 @@ class Model(object):
 
     def train(self, batch_xs, batch_ys):
         self.train_step.run(feed_dict={self.x: batch_xs, self.y: batch_ys,
-            self.keep_prob: 0.5})
+            self.keep_prob: DROPOUT})
 
     def inference(self, x):
         """Make prediction on input x.
@@ -92,9 +95,10 @@ class Model(object):
 
         conv1 = conv_layer(x, 1, 32, 'conv1')
         conv2 = conv_layer(conv1, 32, 64, 'conv2')
-        conv2_flat = tf.reshape(conv2, [-1, 7 * 7 * 64])
+        flat_shape = int(np.prod(conv2.get_shape()[1:]))
+        conv2_flat = tf.reshape(conv2, [-1, flat_shape])
 
-        fc1 = fc_layer(conv2_flat, 7 * 7 * 64, 1024, 'fc1')
+        fc1 = fc_layer(conv2_flat, flat_shape, 1024, 'fc1')
         fc1_drop = tf.nn.dropout(fc1, self.keep_prob)
         fc2 = fc_layer(fc1_drop, 1024, NUM_CLASSES, 'fc2', apply_act=False)
 
@@ -145,7 +149,6 @@ def get_log_dir(dir_path):
     return dir_path + str(i)
 
 def get_image_data(filename, label):
-    print(filename, label)
     raw = tf.read_file(filename)
     img = tf.image.decode_png(raw, channels=1)
     # img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
@@ -225,7 +228,7 @@ if __name__ == "__main__":
 
             model.train(batch_xs, batch_ys)
 
-            if i % math.ceil(dataset_sizes['train'] / BATCH_SIZE) == 0:
+            if i % (dataset_sizes['train'] / BATCH_SIZE) < 1.0:
                 accuracy = model.accuracy_eval(*validation_batch)
                 summary = model.summarize(*validation_batch)
                 epoch = int(i * BATCH_SIZE / dataset_sizes['train'])

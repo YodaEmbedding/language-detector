@@ -155,16 +155,41 @@ if __name__ == "__main__":
             'You may download sample ttf fonts from '
             'https://www.dropbox.com/s/tzz2njlsg4c3u3c/fonts.zip')
 
+    sample_font_paths = [
+        'AverageSans-Regular.ttf',
+        'Basic-Regular.ttf',
+        'EncodeSans-Regular.ttf',
+        'EncodeSansCondensed-Regular.ttf',
+        'EncodeSansExpanded-Regular.ttf',
+        'EncodeSansSemiCondensed-Regular.ttf',
+        'EncodeSansSemiExpanded-Regular.ttf',
+        'Lato-Regular.ttf',
+        'Mada-Regular.ttf',
+        'Mandali-Regular.ttf',
+        'MeeraInimai-Regular.ttf',
+        'Metrophobic-Regular.ttf',
+        'Molengo-Regular.ttf',
+        'Nunito-Regular.ttf',
+        'NunitoSans-Regular.ttf',
+        'OpenSans-Regular.ttf',
+        'Palanquin-Regular.ttf',
+        'PalanquinDark-Regular.ttf',
+        'Pavanam-Regular.ttf',
+        'PontanoSans-Regular.ttf',
+        'Puritan-Regular.ttf',
+        'Roboto-Regular.ttf',
+        'Shanti-Regular.ttf',
+        'SourceSansPro-Regular.ttf',
+        'Yantramanav-Regular.ttf',
+    ]
+
     alphabet = list(string.ascii_lowercase)
     font_paths = glob.glob(os.path.join(FONT_ROOT, '*.ttf'))
+    font_paths = [os.path.join(FONT_ROOT, x) for x in sample_font_paths]
 
     for font_path in font_paths:
         print(font_path)
         write_alphabet(alphabet, DATA_ROOT, font_path)
 
     shuffle_files_into_directories(DATA_ROOT, directories)
-
-# TODO:
-# Split a given directory into training/testing/validation folders
-# Should we keep each font's entire alphabet in one folder or randomly divide them?
 
