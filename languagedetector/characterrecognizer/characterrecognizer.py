@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import math
 import operator
 import os
@@ -10,8 +11,25 @@ import pandas as pd
 import tensorflow as tf
 import tensorflow.contrib.lookup as tfl
 
+# Parse arguments
+parser = argparse.ArgumentParser(description='Character recognition module.')
+parser.add_argument('--load', dest='load', action='store_true')
+parser.add_argument('--no-load', dest='load', action='store_false')
+parser.add_argument('--train', dest='train', action='store_true')
+parser.add_argument('--no-train', dest='train', action='store_false')
+parser.add_argument('--inputfile', dest='inputfile', action='store')
+parser.set_defaults(train=False)
+parser.set_defaults(load=False)
+parser.set_defaults(inputfile='')
+args = parser.parse_args()
+
 # Global constants
+ENABLE_INPUTFILE = bool(len(args.inputfile))
+ENABLE_LOAD = args.load
+ENABLE_TRAIN = args.train
+
 DATA_ROOT = '../../data/alphabet'
+MODEL_PATH = './model/model'
 
 BATCH_SIZE = 64
 DECAY_RATE = 0.95
@@ -69,11 +87,11 @@ class Model(object):
         self.y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='labels')
         self.keep_prob = tf.placeholder(tf.float32, name='dropout')
 
-        y_predict = self.inference(self.x)
-        self.loss = self.loss(self.y, y_predict)
+        self.y_predict = self.inference(self.x)
+        self.loss = self.loss(self.y, self.y_predict)
         self.train_step = self.optimize(self.loss)
 
-        self.accuracy = self.accuracy(self.y, y_predict)
+        self.accuracy = self.accuracy(self.y, self.y_predict)
         self.summary = tf.summary.merge_all()
         self.saver = tf.train.Saver()
 
@@ -95,16 +113,15 @@ class Model(object):
 
         layer = conv_layer(x, 1, 32, 'conv1')
         layer = conv_layer(layer, 32, 64, 'conv2')
-        layer = conv_layer(layer, 64, 128, 'conv3')
+        # layer = conv_layer(layer, 64, 128, 'conv3')
         flat_shape = int(np.prod(layer.get_shape()[1:]))
         layer = tf.reshape(layer, [-1, flat_shape])
 
-        layer = fc_layer(layer, flat_shape, 2048, 'fc1')
+        layer = fc_layer(layer, flat_shape, 1024, 'fc1')
         layer = tf.nn.dropout(layer, self.keep_prob)
-        layer = fc_layer(layer, 2048, NUM_CLASSES, 'fc2', apply_act=False)
+        layer = fc_layer(layer, 1024, NUM_CLASSES, 'fc2', apply_act=False)
 
-        y_predict = layer
-        return y_predict
+        return layer
 
     def loss(self, labels, logits):
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
@@ -135,9 +152,20 @@ class Model(object):
         return self.accuracy.eval(feed_dict={self.x: inputs, self.y: labels,
             self.keep_prob: 1.0})
 
+    def run(self, img):
+        with tf.name_scope('test_run'):
+            test = tf.argmax(tf.nn.softmax(self.y_predict), 1)
+            fake_labels = np.repeat([np.zeros(NUM_CLASSES)], img.shape[0], axis=0)
+            return test.eval(feed_dict={self.x: img, self.y: fake_labels,
+                self.keep_prob: 1.0})
+
     def summarize(self, inputs, labels):
         return self.summary.eval(feed_dict={self.x: inputs, self.y: labels,
             self.keep_prob: 1.0})
+
+    def load(self, filename):
+        sess = tf.get_default_session()
+        self.saver.restore(sess, filename)
 
     def save(self, filename):
         sess = tf.get_default_session()
@@ -156,6 +184,7 @@ def get_image_data(filename, label):
     img = tf.image.resize_images(img, tf.constant([INPUT_HEIGHT, INPUT_WIDTH], tf.int32))
     return img, label
 
+# Dataset management
 def load_dataset(dir_path, label_encoding):
     df = pd.read_csv(os.path.join(dir_path, 'dataset.csv'), sep='\t')
     filenames = df['filename']
@@ -195,10 +224,12 @@ def init_dataset_train(dataset, shuffle_buffer_size):
         .map(get_image_data)
         .batch(BATCH_SIZE))
 
+
 if __name__ == "__main__":
     alphabet = string.ascii_lowercase
     codes = list(range(1, len(alphabet) + 1))
     label_encoding = dict(zip(alphabet, codes))
+    label_decoding = {v: k for k, v in label_encoding.items()}
 
     directories = [ 'train', 'test', 'validation' ]
     datasets = load_datasets(DATA_ROOT, directories, label_encoding)
@@ -216,28 +247,41 @@ if __name__ == "__main__":
     writer = tf.summary.FileWriter(get_log_dir('/tmp/characterrecognizer/'))
 
     with tf.Session() as sess:
+        print('\n\n')
         sess.run(tf.global_variables_initializer())
         writer.add_graph(sess.graph)
 
         validation_batch = sess.run(it_validation.get_next())
         test_batch = sess.run(it_test.get_next())
 
-        # TODO stop training when no improvement on validation set
-        for i in range(254):
-            batch = it_train.get_next()
-            batch_xs, batch_ys = sess.run(batch)
+        if ENABLE_LOAD:
+            model.load(MODEL_PATH)
 
-            model.train(batch_xs, batch_ys)
+        if ENABLE_TRAIN:
+            # TODO stop training when no improvement on validation set
+            for i in range(254):
+                batch = it_train.get_next()
+                batch_xs, batch_ys = sess.run(batch)
 
-            if i % (dataset_sizes['train'] / BATCH_SIZE) < 1.0:
-                accuracy = model.accuracy_eval(*validation_batch)
-                summary = model.summarize(*validation_batch)
-                epoch = int(i * BATCH_SIZE / dataset_sizes['train'])
-                print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
-                writer.add_summary(summary, i)
-                model.save('./model/model')
+                model.train(batch_xs, batch_ys)
 
-        print(model.accuracy_eval(*test_batch))
+                if i % (dataset_sizes['train'] / BATCH_SIZE) < 1.0:
+                    accuracy = model.accuracy_eval(*validation_batch)
+                    summary = model.summarize(*validation_batch)
+                    epoch = int(i * BATCH_SIZE / dataset_sizes['train'])
+                    print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
+                    writer.add_summary(summary, i)
+                    model.save(MODEL_PATH)
+
+            accuracy = model.accuracy_eval(*test_batch)
+            print('test accuracy {}'.format(accuracy))
+
+        if ENABLE_INPUTFILE:
+            img, _ = get_image_data(args.inputfile, None)
+            x = tf.reshape(img, [1, INPUT_HEIGHT, INPUT_WIDTH, 1])
+            img = sess.run(x)
+            result = model.run(img)
+            print('Result: {}'.format(label_decoding[result[0]]))
 
 # TODO
 
