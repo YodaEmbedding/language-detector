@@ -114,15 +114,15 @@ class Model(object):
 
         tf.summary.image('input', x, 3)
 
-        layer = conv_layer(x, 1, 32, 'conv1')
-        layer = conv_layer(layer, 32, 64, 'conv2')
-        # layer = conv_layer(layer, 64, 128, 'conv3')
+        layer = conv_layer(x, 1, 8, 'conv1')
+        layer = conv_layer(layer, 8, 16, 'conv2')
+        # layer = conv_layer(layer, 16, 32, 'conv3')
         flat_shape = int(np.prod(layer.get_shape()[1:]))
         layer = tf.reshape(layer, [-1, flat_shape])
 
-        layer = fc_layer(layer, flat_shape, 2048, 'fc1')
+        layer = fc_layer(layer, flat_shape, 1024, 'fc1')
         layer = tf.nn.dropout(layer, self.keep_prob)
-        layer = fc_layer(layer, 2048, NUM_CLASSES, 'fc2', apply_act=False)
+        layer = fc_layer(layer, 1024, NUM_CLASSES, 'fc2', apply_act=False)
 
         return layer
 
@@ -278,7 +278,7 @@ if __name__ == "__main__":
                     print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
                     writer.add_summary(summary, i)
 
-                if i % (EPOCHES_PER_SAVE * iterations_per_epoch) < 1.0:
+                if i % (EPOCHES_PER_SAVE * iterations_per_epoch) < 1.0 and i > 0:
                     model.save(MODEL_PATH)
 
             model.save(MODEL_PATH)
