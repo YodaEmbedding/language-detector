@@ -19,14 +19,14 @@ parser.add_argument('--load', dest='load', action='store_true')
 parser.add_argument('--no-load', dest='load', action='store_false')
 parser.add_argument('--train', dest='train', action='store_true')
 parser.add_argument('--no-train', dest='train', action='store_false')
-parser.add_argument('--inputfile', dest='inputfile', action='store')
+parser.add_argument('--file', dest='file', action='store')
 parser.set_defaults(train=False)
 parser.set_defaults(load=False)
-parser.set_defaults(inputfile='')
+parser.set_defaults(file='')
 args = parser.parse_args()
 
 # Global constants
-ENABLE_INPUTFILE = bool(len(args.inputfile))
+ENABLE_FILE = bool(len(args.file))
 ENABLE_LOAD = args.load
 ENABLE_TRAIN = args.train
 
@@ -315,8 +315,8 @@ if __name__ == "__main__":
             print('test accuracy {}'.format(accuracy))
             print_letter_accuracy(test_batch, label_decoding, alphabet)
 
-        if ENABLE_INPUTFILE:
-            img, _ = get_image_data(args.inputfile, None)
+        if ENABLE_FILE:
+            img, _ = get_image_data(args.file, None)
             x = tf.reshape(img, [1, INPUT_HEIGHT, INPUT_WIDTH, 1])
             img = sess.run(x)
             result = model.run(img)
