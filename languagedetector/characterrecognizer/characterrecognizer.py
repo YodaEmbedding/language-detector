@@ -6,6 +6,8 @@ import operator
 import os
 import string
 
+from collections import Counter
+
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -94,6 +96,7 @@ class Model(object):
         self.loss = self.loss(self.y, self.y_predict)
         self.train_step = self.optimize(self.loss)
 
+        self.test = tf.argmax(tf.nn.softmax(self.y_predict), 1)
         self.accuracy = self.accuracy(self.y, self.y_predict)
         self.summary = tf.summary.merge_all()
         self.saver = tf.train.Saver()
@@ -145,22 +148,22 @@ class Model(object):
             staircase=True)
 
     def accuracy(self, labels, logits):
-        correct = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
-        correct = tf.cast(correct, tf.float32)
-        accuracy = tf.reduce_mean(correct, name='accuracy')
-        tf.summary.scalar('accuracy', accuracy)
-        return accuracy
+        with tf.name_scope('accuracy'):
+            correct = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
+            correct = tf.cast(correct, tf.float32)
+            accuracy = tf.reduce_mean(correct)
+            tf.summary.scalar('accuracy', accuracy)
+            return accuracy
 
     def accuracy_eval(self, inputs, labels):
         return self.accuracy.eval(feed_dict={self.x: inputs, self.y: labels,
             self.keep_prob: 1.0})
 
-    def run(self, img):
-        with tf.name_scope('test_run'):
-            test = tf.argmax(tf.nn.softmax(self.y_predict), 1)
-            fake_labels = np.repeat([np.zeros(NUM_CLASSES)], img.shape[0], axis=0)
-            return test.eval(feed_dict={self.x: img, self.y: fake_labels,
-                self.keep_prob: 1.0})
+    def run(self, inputs, labels=None):
+        if labels is None:
+            labels = np.repeat([np.zeros(NUM_CLASSES)], inputs.shape[0], axis=0)
+        return self.test.eval(feed_dict={self.x: inputs, self.y: labels,
+            self.keep_prob: 1.0})
 
     def summarize(self, inputs, labels):
         return self.summary.eval(feed_dict={self.x: inputs, self.y: labels,
@@ -197,7 +200,7 @@ def load_dataset(dir_path, label_encoding):
     tf_filenames = tf.constant(file_paths, dtype=tf.string)
 
     labels = [label_encoding[x] for x in labels]
-    tf_labels = tf.one_hot(labels, len(label_encoding))
+    tf_labels = tf.one_hot(labels, NUM_CLASSES)
 
     dataset = tf.data.Dataset.from_tensor_slices((tf_filenames, tf_labels))
     return dataset
@@ -227,11 +230,36 @@ def init_dataset_train(dataset, shuffle_buffer_size):
         .map(get_image_data)
         .batch(BATCH_SIZE))
 
+def print_letter_accuracy(test_batch, label_decoding, alphabet):
+    y_predict = model.run(*test_batch)
+    predictions = np.array([y for y in y_predict])
+    labels = np.array([y for y in np.argmax(test_batch[1], 1)])
+    correct = predictions == labels
+
+    labels_dec = [label_decoding[x] for x in labels]
+    predictions_dec = [label_decoding[x] for x in predictions]
+    pairs = list(zip(labels_dec, correct))
+
+    same = [x[0] for x in pairs if x[1]]
+    different = [x[0] for x in pairs if not x[1]]
+
+    same_counts = Counter(same)
+    different_counts = Counter(different)
+    accuracy = {}
+
+    for letter in alphabet:
+        total = same_counts[letter] + different_counts[letter]
+        accuracy[letter] = (same_counts[letter] / total if total != 0
+            else float('nan'))
+
+    strs = ['{} {}'.format(k, v) for k, v in accuracy.items()]
+    print('\n'.join(strs))
 
 if __name__ == "__main__":
     alphabet = string.ascii_lowercase
     codes = list(range(1, len(alphabet) + 1))
     label_encoding = dict(zip(alphabet, codes))
+    label_encoding['None'] = 0
     label_decoding = {v: k for k, v in label_encoding.items()}
 
     directories = [ 'train', 'test', 'validation' ]
@@ -255,7 +283,6 @@ if __name__ == "__main__":
         writer.add_graph(sess.graph)
 
         validation_batch = sess.run(it_validation.get_next())
-        test_batch = sess.run(it_test.get_next())
 
         if ENABLE_LOAD:
             model.load(MODEL_PATH)
@@ -282,8 +309,11 @@ if __name__ == "__main__":
                     model.save(MODEL_PATH)
 
             model.save(MODEL_PATH)
+
+            test_batch = sess.run(it_test.get_next())
             accuracy = model.accuracy_eval(*test_batch)
             print('test accuracy {}'.format(accuracy))
+            print_letter_accuracy(test_batch, label_decoding, alphabet)
 
         if ENABLE_INPUTFILE:
             img, _ = get_image_data(args.inputfile, None)
