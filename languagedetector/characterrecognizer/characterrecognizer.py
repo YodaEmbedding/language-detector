@@ -31,6 +31,9 @@ ENABLE_TRAIN = args.train
 DATA_ROOT = '../../data/alphabet'
 MODEL_PATH = './model/model'
 
+MAX_EPOCHES = 50
+EPOCHES_PER_SAVE = 100
+
 BATCH_SIZE = 64
 DECAY_RATE = 0.95
 LEARNING_RATE = 1e-4
@@ -117,9 +120,9 @@ class Model(object):
         flat_shape = int(np.prod(layer.get_shape()[1:]))
         layer = tf.reshape(layer, [-1, flat_shape])
 
-        layer = fc_layer(layer, flat_shape, 1024, 'fc1')
+        layer = fc_layer(layer, flat_shape, 2048, 'fc1')
         layer = tf.nn.dropout(layer, self.keep_prob)
-        layer = fc_layer(layer, 1024, NUM_CLASSES, 'fc2', apply_act=False)
+        layer = fc_layer(layer, 2048, NUM_CLASSES, 'fc2', apply_act=False)
 
         return layer
 
@@ -258,21 +261,27 @@ if __name__ == "__main__":
             model.load(MODEL_PATH)
 
         if ENABLE_TRAIN:
+            iterations_per_epoch = dataset_sizes['train'] / BATCH_SIZE
+            iterations_max = math.ceil(MAX_EPOCHES * iterations_per_epoch)
+
             # TODO stop training when no improvement on validation set
-            for i in range(254):
+            for i in range(iterations_max):
                 batch = it_train.get_next()
                 batch_xs, batch_ys = sess.run(batch)
 
                 model.train(batch_xs, batch_ys)
 
-                if i % (dataset_sizes['train'] / BATCH_SIZE) < 1.0:
+                if i % iterations_per_epoch < 1.0:
                     accuracy = model.accuracy_eval(*validation_batch)
                     summary = model.summarize(*validation_batch)
-                    epoch = int(i * BATCH_SIZE / dataset_sizes['train'])
+                    epoch = int(i / iterations_per_epoch)
                     print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
                     writer.add_summary(summary, i)
+
+                if i % (EPOCHES_PER_SAVE * iterations_per_epoch) < 1.0:
                     model.save(MODEL_PATH)
 
+            model.save(MODEL_PATH)
             accuracy = model.accuracy_eval(*test_batch)
             print('test accuracy {}'.format(accuracy))
 
@@ -285,11 +294,7 @@ if __name__ == "__main__":
 
 # TODO
 
-# Reduce number of fonts
 # Experiment with different hyperparameters
-
-# restore/loading trained model (let this run overnight, with stopping condition)
-# Scale network params (28 -> 128, 10 -> 26)
 
 # Augmentation:
 #     downsample, upscale (simulate different size data)
