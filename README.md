@@ -2,17 +2,27 @@
 
 ## Libraries
 
-Python libraries used: tensorflow, pillow, opencv.
+Python libraries required: `tensorflow`, `opencv`, `pillow`, `pandas`, and `numpy`.
 
 ## Dataset
 
 To generate data, first download the fonts from [here](https://www.dropbox.com/s/tzz2njlsg4c3u3c/fonts.zip) and save to `fonts/`. Then run:
 
-	mkdir -p data/alphabet
     cd datagen
-	python generate.py
+    python3 generate.py
 
-Alternatively, download the data set from [here](https://www.dropbox.com/s/2s2ihgbw740k8t2/alphabet.zip) and save to `data/alphabet/`.
+Alternatively, download the data set from [here](https://www.dropbox.com/s/2s2ihgbw740k8t2/alphabet.zip) and extract contents to `data/alphabet/`.
+
+## Training and testing
+
+To train:
+
+    cd languagedetector/characterrecognizer
+    python3 characterrecognizer.py --train
+
+To test on a sample, load the trained model and input a png file:
+
+    python3 characterrecognizer.py --load --file test.png
 
 # Status
 
