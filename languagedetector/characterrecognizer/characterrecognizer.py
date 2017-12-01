@@ -8,10 +8,10 @@ import string
 
 from collections import Counter
 
-import numpy as np
-import pandas as pd
 import tensorflow as tf
 import tensorflow.contrib.lookup as tfl
+import numpy as np
+import pandas as pd
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='Character recognition module.')
