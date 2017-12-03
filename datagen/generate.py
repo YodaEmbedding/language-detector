@@ -3,10 +3,13 @@
 import contextlib
 import glob
 import os
-import pandas as pd
 import random
 import shutil
 import string
+
+import cv2
+import numpy as np
+import pandas as pd
 
 from matplotlib import font_manager
 
@@ -37,6 +40,14 @@ def pad_boundaries(img):
     padded_img.paste(img, (x, y))
 
     return padded_img
+
+def preprocess_img(img):
+    img = np.asarray(img).copy()
+    # img[img < 128] = 0
+    # img[img > 128] = 255
+    _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+    img = Image.fromarray(np.uint8(img))
+    return img
 
 def draw_text_center(img, draw, text, font, **kwargs):
     """Draw text in center.
@@ -77,6 +88,7 @@ def write_letter(text, font, filename):
     img = Image.new('RGB', IMAGE_SIZE, 'white')
     draw = ImageDraw.Draw(img)
     img = draw_text_center(img, draw, text, font, fill=(0, 0, 0))
+    img = preprocess_img(img)
 
     # If file already exists, overwrite
     with contextlib.suppress(FileNotFoundError):
