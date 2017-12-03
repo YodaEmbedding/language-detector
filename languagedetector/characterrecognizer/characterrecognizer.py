@@ -50,6 +50,10 @@ HEIGHT = 128
 
 NUM_CLASSES = 26
 
+# Augmention parameters
+ANGLE_RANGE = 0.00 * np.pi
+NOISE_STD = 0.0
+
 # Decorators
 def wrap_with_counter(fn, counter):
     def wrapped_fn(*args, **kwargs):
@@ -204,8 +208,7 @@ def get_image_data(filename, label):
 
 # TODO
 def augment_image(img, angle):
-    # with tf.name_scope('augmentation'):
-    # shape = tf.shape(img)
+    shape = tf.shape(img)
     # shape = img.get_shape()
 
     # Invert to ensure background is black.
@@ -215,20 +218,27 @@ def augment_image(img, angle):
 
     img = tf.contrib.image.rotate(img, angle, interpolation='BILINEAR')
 
+    # TODO translations, zoom
+
     # Re-invert or uninvert the inverted image so that it is no longer inverted
     img = max_intensity - img
+
+    # Discolorations
+    fine_noise = tf.truncated_normal(shape=shape, mean=0.0, stddev=NOISE_STD)
+    # coarse_noise = tf.truncated_normal(shape=shape, mean=0.0, stddev=NOISE_STD)
+    img = img + fine_noise
+    img = tf.clip_by_value(img, 0, 255)
 
     return img
 
 def augment(img, label):
-    # with tf.name_scope('augmentation'):
-    angle_range = 0.01 * np.pi
-    angle = tf.random_uniform([1], minval=-angle_range, maxval=angle_range)
-    # angle = tf.truncated_normal([1], mean=0.0, stddev=0.5 * angle_range)
-    # angle = tf.where(angle >= 0.0, angle, 2.0 * np.pi - angle)
-    # tf.Print(angle, [angle])
-    img = augment_image(img, angle)
-    return img, label
+    with tf.name_scope('augmentation'):
+        # angle = tf.random_uniform([1], minval=-ANGLE_RANGE, maxval=ANGLE_RANGE)
+        angle = tf.truncated_normal([1], mean=0.0, stddev=0.5 * ANGLE_RANGE)
+        # angle = tf.where(angle >= 0.0, angle, 2.0 * np.pi - angle)
+        # tf.Print(angle, [angle])
+        img = augment_image(img, angle)
+        return img, label
 
 def get_log_dir(dir_path):
     i = 1
@@ -332,8 +342,6 @@ if __name__ == "__main__":
         sess.run(tf.global_variables_initializer())
         writer.add_graph(sess.graph)
 
-        validation_batch = sess.run(it_validation.get_next())
-
         if ENABLE_LOAD:
             model.load(MODEL_PATH)
 
@@ -349,8 +357,11 @@ if __name__ == "__main__":
                 model.train(batch_xs, batch_ys)
 
                 if i % iterations_per_epoch < 1.0:
+                    validation_batch = sess.run(it_validation.get_next())
                     accuracy = model.accuracy_eval(*validation_batch)
                     summary = model.summarize(*validation_batch)
+                    # accuracy = model.accuracy_eval(batch_xs, batch_ys)
+                    # summary = model.summarize(batch_xs, batch_ys)
                     epoch = int(i / iterations_per_epoch)
                     print('epoch {}, step {}, accuracy {}'.format(epoch, i, accuracy))
                     writer.add_summary(summary, i)
@@ -378,19 +389,12 @@ if __name__ == "__main__":
 
 # Augmentation:
 #     downsample, upscale (simulate different size data)
-#     rotation
-#     noise
-#     contrast
 
 # Write language string distance thing/lookup
 # Write test program (i.e. input one single image)
 # Join everything up together
 
-# https://stackoverflow.com/questions/44132307/tf-contrib-data-dataset-repeat-with-shuffle-notice-epoch-end-mixed-epochs
-# If you want to perform some computation between epochs, and avoid mixing data from different epochs, it is probably easiest to avoid repeat() and catch the OutOfRangeError at the end of each epoch.
-
 # Nitpicking
-# Split source code into multiple files if too long
 # name_scope
 # tf.decode_csv instead of pandas
 
