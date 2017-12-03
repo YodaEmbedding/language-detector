@@ -7,6 +7,7 @@ import os
 import string
 
 from collections import Counter
+from functools import partial
 
 import tensorflow as tf
 import tensorflow.contrib.lookup as tfl
@@ -41,12 +42,21 @@ DECAY_RATE = 0.95
 LEARNING_RATE = 1e-4
 DROPOUT = 0.5
 
-IMG_WIDTH = 128
-IMG_HEIGHT = 128
-INPUT_WIDTH = 128
-INPUT_HEIGHT = 128
+# Actual image widths and resized widths
+SOURCE_WIDTH = 128
+SOURCE_HEIGHT = 128
+WIDTH = 128
+HEIGHT = 128
 
 NUM_CLASSES = 26
+
+# Decorators
+def wrap_with_counter(fn, counter):
+    def wrapped_fn(*args, **kwargs):
+        # control_dependencies forces the assign op to be run even if we don't use the result
+        with tf.control_dependencies([tf.assign_add(counter, 1)]):
+            return fn(*args, **kwargs)
+    return wrapped_fn
 
 # Initialization functions
 def weight_variable(shape):
@@ -88,7 +98,7 @@ class Model(object):
         self.batch_step = tf.Variable(0, dtype=tf.float32)
         self.train_size = train_size
 
-        self.x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, 1], name='x')
+        self.x = tf.placeholder(tf.float32, [None, HEIGHT, WIDTH, 1], name='x')
         self.y = tf.placeholder(tf.float32, [None, NUM_CLASSES], name='labels')
         self.keep_prob = tf.placeholder(tf.float32, name='dropout')
 
@@ -115,7 +125,7 @@ class Model(object):
             y_predict (tf.Variable): Prediction.
         """
 
-        tf.summary.image('input', x, 3)
+        tf.summary.image('input', x, 1)
 
         layer = conv_layer(x, 1, 8, 'conv1')
         layer = conv_layer(layer, 8, 16, 'conv2')
@@ -177,18 +187,54 @@ class Model(object):
         sess = tf.get_default_session()
         self.saver.save(sess, filename)
 
+# counter = tf.Variable(0, tf.int32)
+# counter = tf.get_variable(dtype=tf.int32, shape=(), name='counter',
+#     initializer=tf.zeros_initializer())
+# wrap_with_counter_ = partial(wrap_with_counter, counter=counter)
+# @wrap_with_counter_
+
+def get_image_data(filename, label):
+    raw = tf.read_file(filename)
+    img = tf.image.decode_png(raw, channels=1)
+    # img.set_shape([None, SOURCE_HEIGHT, SOURCE_WIDTH, 1])
+    # img = tf.image.resize_image_with_crop_or_pad(img, HEIGHT, WIDTH)
+    img = tf.image.resize_images(img, tf.constant([HEIGHT, WIDTH], tf.int32))
+    # tf.Print(img, [img.get_shape()])
+    return img, label
+
+# TODO
+def augment_image(img, angle):
+    # with tf.name_scope('augmentation'):
+    # shape = tf.shape(img)
+    # shape = img.get_shape()
+
+    # Invert to ensure background is black.
+    # Then, zero padded values are of same color.
+    max_intensity = tf.constant(255.0, dtype=tf.float32)
+    img = max_intensity - img
+
+    img = tf.contrib.image.rotate(img, angle, interpolation='BILINEAR')
+
+    # Re-invert or uninvert the inverted image so that it is no longer inverted
+    img = max_intensity - img
+
+    return img
+
+def augment(img, label):
+    # with tf.name_scope('augmentation'):
+    angle_range = 0.01 * np.pi
+    angle = tf.random_uniform([1], minval=-angle_range, maxval=angle_range)
+    # angle = tf.truncated_normal([1], mean=0.0, stddev=0.5 * angle_range)
+    # angle = tf.where(angle >= 0.0, angle, 2.0 * np.pi - angle)
+    # tf.Print(angle, [angle])
+    img = augment_image(img, angle)
+    return img, label
+
 def get_log_dir(dir_path):
     i = 1
     while os.path.isdir(dir_path + str(i)):
         i += 1
     return dir_path + str(i)
-
-def get_image_data(filename, label):
-    raw = tf.read_file(filename)
-    img = tf.image.decode_png(raw, channels=1)
-    # img = tf.image.resize_image_with_crop_or_pad(img, IMG_HEIGHT, IMG_WIDTH)
-    img = tf.image.resize_images(img, tf.constant([INPUT_HEIGHT, INPUT_WIDTH], tf.int32))
-    return img, label
 
 # Dataset management
 def load_dataset(dir_path, label_encoding):
@@ -222,12 +268,16 @@ def get_dataset_size(root, dataset_name):
 def init_dataset_test(dataset, batch_size):
     return (dataset.repeat()
         .map(get_image_data)
+        # .cache()
+        # .map(augment)
         .batch(batch_size))
 
 def init_dataset_train(dataset, shuffle_buffer_size):
     return (dataset.repeat()
         .shuffle(shuffle_buffer_size)
         .map(get_image_data)
+        # .cache()
+        .map(augment)
         .batch(BATCH_SIZE))
 
 def print_letter_accuracy(test_batch, label_decoding, alphabet):
@@ -317,7 +367,7 @@ if __name__ == "__main__":
 
         if ENABLE_FILE:
             img, _ = get_image_data(args.file, None)
-            x = tf.reshape(img, [1, INPUT_HEIGHT, INPUT_WIDTH, 1])
+            x = tf.reshape(img, [1, HEIGHT, WIDTH, 1])
             img = sess.run(x)
             result = model.run(img)
             print('Result: {}'.format(label_decoding[result[0]]))
