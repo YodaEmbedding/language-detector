@@ -18,17 +18,21 @@ import pandas as pd
 parser = argparse.ArgumentParser(description='Character recognition module.')
 parser.add_argument('--load', dest='load', action='store_true')
 parser.add_argument('--no-load', dest='load', action='store_false')
+parser.add_argument('--test', dest='test', action='store_true')
+parser.add_argument('--no-test', dest='test', action='store_false')
 parser.add_argument('--train', dest='train', action='store_true')
 parser.add_argument('--no-train', dest='train', action='store_false')
 parser.add_argument('--file', dest='file', action='store')
-parser.set_defaults(train=False)
 parser.set_defaults(load=False)
+parser.set_defaults(test=True)
+parser.set_defaults(train=False)
 parser.set_defaults(file='')
 args = parser.parse_args()
 
 # Global constants
 ENABLE_FILE = bool(len(args.file))
 ENABLE_LOAD = args.load
+ENABLE_TEST_STATS = args.test
 ENABLE_TRAIN = args.train
 
 DATA_ROOT = '../../data/alphabet'
@@ -300,6 +304,9 @@ def print_letter_accuracy(test_batch, label_decoding, alphabet):
     predictions_dec = [label_decoding[x] for x in predictions]
     pairs = list(zip(labels_dec, correct))
 
+    # pairs_ = list(zip(labels_dec, predictions_dec))
+    # print(pairs_)
+
     same = [x[0] for x in pairs if x[1]]
     different = [x[0] for x in pairs if not x[1]]
 
@@ -371,6 +378,10 @@ if __name__ == "__main__":
 
             model.save(MODEL_PATH)
 
+        if not ENABLE_LOAD and not ENABLE_TRAIN:
+            print('Warning!\nNo model loaded or trained!\n')
+
+        if ENABLE_TRAIN or ENABLE_TEST_STATS:
             test_batch = sess.run(it_test.get_next())
             accuracy = model.accuracy_eval(*test_batch)
             print('test accuracy {}'.format(accuracy))
