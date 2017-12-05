@@ -147,6 +147,7 @@ def shuffle_files_into_directories(root, directories):
 
     for dir_name, ratio in directories:
         directory = os.path.join(root, dir_name)
+        print(directory)
         end_idx = start_idx + int(ratio * len(files))
         for f in files[start_idx : end_idx]:
             shutil.move(os.path.join(root, f), directory)
@@ -203,5 +204,6 @@ if __name__ == "__main__":
         print(font_path)
         write_alphabet(alphabet, DATA_ROOT, font_path)
 
+    print('\nShuffling files into directories...')
     shuffle_files_into_directories(DATA_ROOT, directories)
 
